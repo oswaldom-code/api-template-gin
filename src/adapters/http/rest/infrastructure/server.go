@@ -42,8 +42,7 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 	serverConfig := config.GetServerConfig()
 	// validate parameters configuration
 	if ok := serverConfig.Validate(); ok != nil {
-
-		panic(ok)
+		panic("[ERROR] server configuration is not valid")
 	}
 
 	// set gin mode (debug or release)
@@ -55,7 +54,7 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 		// Logging to a file.  // TODO: add current date to log file name
 		f, ok := os.Create("log/error.log")
 		if ok != nil {
-			panic(ok)
+			panic("[ERROR] error creating log file")
 		}
 		gin.DefaultWriter = io.MultiWriter(f)
 	}
