@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 services:
   db:
@@ -25,3 +25,11 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_USER}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+
+  app:
+    image: api-template-app:latest
+    container_name: ${APP_CONTAINER_NAME}
+    ports:
+      - "${APP_PORT_HOST}:${APP_PORT_CONTAINER}"
+    volumes:
+      - .:/app
