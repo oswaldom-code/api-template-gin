@@ -31,7 +31,7 @@ services:
   app:
     image: api-template-app:latest
     container_name: ${APP_CONTAINER_NAME}
-    ports:
-      - "${APP_PORT_HOST}:${APP_PORT_CONTAINER}"
+    # ports:
+    #   - "${APP_PORT_HOST}:${APP_PORT_CONTAINER}"
     volumes:
       - .:/app
