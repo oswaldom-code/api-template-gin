@@ -6,13 +6,13 @@ vars:
     # ENV: prod or dev
     ENV: dev
 
-dotenv: ["{{.PROJECT_PATH}}/config/environments/{{.ENV}}/.env"]
+dotenv: [".env"]
 
 tasks:
     app.up:
         desc: "Start app service in background mode. Usage: task app.up"
         cmds:
-            - sudo docker-compose --env-file {{.PROJECT_PATH}}/config/environments/{{.ENV}}/.env up
+            - sudo docker-compose up
 
     app.down:
         desc: "Stop app service. Usage: task app.down"

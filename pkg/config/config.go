@@ -2,16 +2,12 @@ package config
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
+	"os"
+	"strconv"
 
+	"github.com/joho/godotenv"
 	"github.com/oswaldom-code/api-template-gin/pkg/log"
-
-	"github.com/spf13/viper"
-)
-
-const (
-	CONFIG_FILE = "api"
+	"github.com/spf13/pflag"
 )
 
 var environment string
@@ -46,21 +42,19 @@ func SetEnvironment(env string) {
 	environment = env
 }
 
-// Validate ServerConfig value validation
 func (s *ServerConfig) Validate() error {
 	if s.Host == "" || s.Port == "0" || s.Scheme == "" || s.Mode == "" {
-		return fmt.Errorf(`ServerConfig is invalid: \n
-		env: %s
-		host: %s
-		port: %s
-		scheme: %s
-		mode: %s`,
+		return fmt.Errorf(`ServerConfig is invalid: 
+        env: %s
+        host: %s
+        port: %s
+        scheme: %s
+        mode: %s`,
 			environment, s.Host, s.Port, s.Scheme, s.Mode)
 	}
 	return nil
 }
 
-// AsUri returns the host:port
 func (s ServerConfig) AsUri() string {
 	return s.Host + ":" + s.Port
 }
@@ -74,87 +68,117 @@ type AuthenticateKeyConfig struct {
 	Secret string
 }
 
-// GetProjectPath returns the current project path
-func GetProjectPath() string {
-	dir, err := filepath.Abs(filepath.Dir("."))
-	if err != nil {
-		log.Warn("Warning, cannot get current path")
-		return ""
+func LoadConfiguration() {
+	if err := godotenv.Load(); err != nil {
+		log.Warn("No .env file found, proceeding with default values")
 	}
-	// Traverse back from current directory until service base dir is reach and add to config path
-	for !strings.HasSuffix(dir, "") && dir != "/" {
-		dir, err = filepath.Abs(dir + "/..")
-		if err != nil {
-			break
-		}
-	}
-	return dir
-}
 
-func LoadConfigurationFile() {
-	viper.SetConfigName(CONFIG_FILE)
-	viper.AddConfigPath(GetProjectPath() + "/config")
-	viper.AutomaticEnv()
-	replacer := strings.NewReplacer("-", "_", ".", "_")
-	viper.SetEnvKeyReplacer(replacer)
+	// Definir banderas de configuración
+	pflag.String("db.user", "", "Database user")
+	pflag.String("db.password", "", "Database password")
+	pflag.String("db.host", "", "Database host")
+	pflag.Int("db.port", 0, "Database port")
+	pflag.String("server.host", "localhost", "Server host")
+	pflag.String("server.port", "9000", "Server port")
+	pflag.String("server.scheme", "http", "Server scheme")
+	pflag.String("server.mode", "debug", "Server mode")
+	pflag.String("auth.secret", "", "Authentication secret")
 
-	if err := viper.ReadInConfig(); err != nil {
-		fmt.Println("Using config error:", err.Error())
-	}
+	pflag.Parse()
+
+	loadEnvVariables()
+
 	log.SetLogLevel(GetLogConfig().Level)
 }
 
+func loadEnvVariables() {
+	envVars := []struct {
+		key   string
+		value string
+	}{
+		{"DB_USER", "db.user"},
+		{"DB_PASSWORD", "db.password"},
+		{"DB_HOST", "db.host"},
+		{"DB_PORT", "db.port"},
+		{"SERVER_HOST", "server.host"},
+		{"SERVER_PORT", "server.port"},
+		{"SERVER_SCHEME", "server.scheme"},
+		{"SERVER_MODE", "server.mode"},
+		{"AUTH_SECRET", "auth.secret"},
+	}
+
+	for _, envVar := range envVars {
+		if value, exists := os.LookupEnv(envVar.key); exists {
+			if err := os.Setenv(envVar.value, value); err != nil {
+				log.Warn(fmt.Sprintf("Failed to set environment variable %s: %v", envVar.value, err))
+			}
+		}
+	}
+}
+
 func GetDBConfig() DBConfig {
-	// Get current environment
+	port, _ := strconv.Atoi(os.Getenv("db.port"))
 	config := DBConfig{
-		User:               viper.GetString(environment + ".db.user"),
-		Password:           viper.GetString(environment + ".db.password"),
-		Host:               viper.GetString(environment + ".db.host"),
-		Port:               viper.GetInt(environment + ".db.port"),
-		Database:           viper.GetString(environment + ".db.database"),
-		MaxOpenConnections: viper.GetInt(environment + ".db.max_connections"),
-		SSLMode:            viper.GetString(environment + ".db.ssl_mode"),
-		LogMode:            viper.GetString(environment + ".db.log_mode"),
-		Engine:             viper.GetString(environment + ".db.engine"),
+		User:               getEnv("db.user", "default_user"),     // Valor predeterminado
+		Password:           getEnv("db.password", "default_pass"), // Valor predeterminado
+		Host:               getEnv("db.host", "localhost"),        // Valor predeterminado
+		Port:               port,
+		Database:           getEnv("db.database", "default_db"), // Valor predeterminado
+		MaxOpenConnections: getIntEnv("db.max_connections", 10), // Valor predeterminado
+		SSLMode:            getEnv("db.ssl_mode", "disable"),    // Valor predeterminado
+		LogMode:            getEnv("db.log_mode", "info"),       // Valor predeterminado
+		Engine:             getEnv("db.engine", "postgres"),     // Valor predeterminado
 	}
 	log.DebugWithFields("DBConfig", log.Fields{"config": config})
 	return config
 }
 
 func GetServerConfig() ServerConfig {
-	log.DebugWithFields("GetServerConfig", log.Fields{"environment": environment})
 	config := ServerConfig{
-		Host:              viper.GetString(environment + ".server.host"),
-		Port:              viper.GetString(environment + ".server.port"),
-		Scheme:            viper.GetString(environment + ".server.scheme"),
-		Mode:              viper.GetString(environment + ".server.mode"),
-		PathToSSLKeyFile:  viper.GetString(environment + ".server.ssl.key"),
-		PathToSSLCertFile: viper.GetString(environment + ".server.ssl.cert"),
-		Static:            viper.GetString(environment + ".server.static"),
+		Host:              getEnv("server.host", "localhost"), // Valor predeterminado
+		Port:              getEnv("server.port", "9000"),      // Valor predeterminado
+		Scheme:            getEnv("server.scheme", "http"),    // Valor predeterminado
+		Mode:              getEnv("server.mode", "debug"),     // Valor predeterminado
+		PathToSSLKeyFile:  os.Getenv("server.ssl.key"),        // Podría ser opcional
+		PathToSSLCertFile: os.Getenv("server.ssl.cert"),       // Podría ser opcional
+		Static:            os.Getenv("server.static"),         // Podría ser opcional
 	}
 	log.DebugWithFields("ServerConfig", log.Fields{"config": config})
 	return config
 }
 
-func GetPathFromWhereStaticFilesWillBeServed() string {
-	return viper.GetString(environment + ".server.static")
-}
-
 func GetLogConfig() LoggingConfig {
 	return LoggingConfig{
-		Level:        viper.GetString(environment + ".log.level"),
-		ErrorLogFile: viper.GetString(environment + ".log.errorLogFile"),
+		Level:        getEnv("log.level", "info"),
+		ErrorLogFile: os.Getenv("log.errorLogFile"),
 	}
 }
 
 func GetEnvironmentConfig() EnvironmentConfig {
 	return EnvironmentConfig{
-		Environment: viper.GetString("environment"),
+		Environment: getEnv("environment", "development"),
 	}
 }
 
 func GetAuthenticationKey() AuthenticateKeyConfig {
 	return AuthenticateKeyConfig{
-		Secret: viper.GetString(environment + ".auth.secret"),
+		Secret: getEnv("auth.secret", "default_secret"),
 	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
+}
+
+func getIntEnv(key string, defaultValue int) int {
+	value, exists := os.LookupEnv(key)
+	if exists {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }

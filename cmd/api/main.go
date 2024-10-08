@@ -1,51 +1,77 @@
 package api
 
 import (
+	"context"
+	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"time"
 
 	"github.com/oswaldom-code/api-template-gin/pkg/config"
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure"
 	"github.com/spf13/cobra"
 )
 
-// load config file and set environment variables
-func init() {
-	config.LoadConfigurationFile()
+func Initialize() {
+	config.LoadConfiguration()
 	config.SetEnvironment(config.GetEnvironmentConfig().Environment)
 }
 
-// serveCmd represents the serve command
-var serveCmdNew = &cobra.Command{
-	Use:   "server",
-	Short: "Spin up the web server that hosts the API",
-	Long:  `The web server hosts the API, and manages the authentication middleware`,
-	Run: func(cmd *cobra.Command, args []string) {
-		NewServer()
-	},
+func newServeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "server",
+		Short: "Run the server",
+		Long:  `The web server hosts the API and manages the authentication middleware.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			StartServer()
+		},
+	}
 }
 
-func NewServer() {
+func StartServer() {
 	r := infrastructure.NewServer()
-	var err error
-	//setup routes
-	println("Server running at: ", config.GetServerConfig().AsUri())
-	if config.GetServerConfig().Scheme == "https" { // https
-		err = r.RunTLS(
-			config.GetServerConfig().AsUri(),
-			config.GetServerConfig().PathToSSLCertFile,
-			config.GetServerConfig().PathToSSLKeyFile,
-		)
-	} else { // http
-		err = r.Run(config.GetServerConfig().AsUri())
+	uri := config.GetServerConfig().AsUri()
+
+	srv := &http.Server{
+		Addr:    uri,
+		Handler: r,
 	}
-	if err != nil {
-		panic(err.Error())
+
+	go func() {
+		log.Printf("Server running at: %s", uri)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
 	}
+
+	log.Println("Server gracefully stopped.")
 }
 
-// Execute runs the root command
 func Execute() {
-	if err := serveCmdNew.Execute(); err != nil {
+	Initialize()
+
+	rootCmd := &cobra.Command{
+		Use: "api-template", // Replace with your desired command name
+	}
+
+	rootCmd.AddCommand(newServeCmd())
+
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatalf("Command execution failed: %v", err)
 		os.Exit(1)
 	}
 }
