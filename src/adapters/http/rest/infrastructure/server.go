@@ -61,8 +61,6 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 
 	// create routes
 	router := gin.Default()
-	// set static files directory
-	router.Static("/static", serverConfig.Static)
 	// set metrics
 	setMetrics(router)
 	// set middleware
