@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 
@@ -10,124 +11,90 @@ import (
 
 var logger = logrus.New()
 
-// Fields wraps logrus.Fields, which is a map[string]interface{}
-type Fields logrus.Fields
-
-// SetLogLevel sets the logging level for the logger
-func SetLogLevel(level string) {
-	logger.Level, _ = logrus.ParseLevel(level)
+type Fields map[string]interface{}
+type LogConfig struct {
+	LogToFile bool
+	FilePath  string
 }
 
-// SetLogFormatter sets the formatting of the logger
-func SetLogFormatter(formatter logrus.Formatter) {
-	logger.Formatter = formatter
-}
-
-// Debug logs a message at level Debug on the standard logger.
-func Debug(args ...interface{}) {
-	if logger.Level >= logrus.DebugLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Debug(args...)
+func DefaultLoggerConfig() LogConfig {
+	return LogConfig{
+		LogToFile: false,
+		FilePath:  "",
 	}
 }
 
-// Debug logs a message with fields at level Debug on the standard logger.
-func DebugWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.DebugLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Debug(l)
+func ConfigureLogger(config LogConfig) error {
+	if config.LogToFile {
+		if config.FilePath == "" {
+			return fmt.Errorf("file path must be provided when logging to file")
+		}
+		file, err := os.OpenFile(config.FilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+		logger.SetOutput(file)
+		logger.SetFormatter(&logrus.JSONFormatter{})
+	} else {
+		logger.SetOutput(os.Stdout) // default to stdout
 	}
+	return nil
+}
+func SetLogLevel(level string) error {
+	lvl, err := logrus.ParseLevel(level)
+	if err != nil {
+		return fmt.Errorf("invalid log level: %w", err)
+	}
+	logger.Level = lvl
+	return nil
+}
+func Debug(message interface{}, fields ...Fields) {
+	logWithFields(logrus.DebugLevel, message, fields...)
 }
 
-// Info logs a message at level Info on the standard logger.
-func Info(args ...interface{}) {
-	if logger.Level >= logrus.InfoLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Info(args...)
-	}
+func Info(message interface{}, fields ...Fields) {
+	logWithFields(logrus.InfoLevel, message, fields...)
 }
 
-// Debug logs a message with fields at level Debug on the standard logger.
-func InfoWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.InfoLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Info(l)
-	}
+func Warn(message interface{}, fields ...Fields) {
+	logWithFields(logrus.WarnLevel, message, fields...)
 }
 
-// Warn logs a message at level Warn on the standard logger.
-func Warn(args ...interface{}) {
-	if logger.Level >= logrus.WarnLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Warn(args...)
-	}
+func Error(message interface{}, fields ...Fields) {
+	logWithFields(logrus.ErrorLevel, message, fields...)
 }
 
-// WarnWithFields logs a message with fields at level Warn on the standard logger.
-func WarnWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.WarnLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Warn(l)
-	}
+func Fatal(message interface{}, fields ...Fields) {
+	logWithFields(logrus.FatalLevel, message, fields...)
 }
 
-// Error logs a message at level Error on the standard logger.
-func Error(args ...interface{}) {
-	if logger.Level >= logrus.ErrorLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Error(args...)
-	}
+func Panic(message interface{}, fields ...Fields) {
+	logWithFields(logrus.PanicLevel, message, fields...)
 }
 
-// ErrorWithFields logs a message with fields at level Error on the standard logger.
-func ErrorWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.ErrorLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Error(l)
+func logWithFields(level logrus.Level, message interface{}, fields ...Fields) {
+	inputFields := Fields{}
+	if len(fields) > 0 && fields[0] != nil {
+		inputFields = fields[0]
 	}
-}
 
-// Fatal logs a message at level Fatal on the standard logger.
-func Fatal(args ...interface{}) {
-	if logger.Level >= logrus.FatalLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Fatal(args...)
-	}
-}
-
-// FatalWithFields logs a message with fields at level Fatal on the standard logger.
-func FatalWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.FatalLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Fatal(l)
-	}
-}
-
-// Panic logs a message at level Panic on the standard logger.
-func Panic(args ...interface{}) {
-	if logger.Level >= logrus.PanicLevel {
-		entry := logger.WithFields(logrus.Fields{})
-		entry.Data["file"] = fileInfo(2)
-		entry.Panic(args...)
-	}
-}
-
-// PanicWithFields logs a message with fields at level Panic on the standard logger.
-func PanicWithFields(l interface{}, f Fields) {
-	if logger.Level >= logrus.PanicLevel {
-		entry := logger.WithFields(logrus.Fields(f))
-		entry.Data["file"] = fileInfo(2)
-		entry.Panic(l)
+	if logger.Level >= level {
+		entry := logger.WithFields(logrus.Fields(inputFields))
+		entry.Data["file"] = fileInfo(3)
+		switch level {
+		case logrus.DebugLevel:
+			entry.Debug(message)
+		case logrus.InfoLevel:
+			entry.Info(message)
+		case logrus.WarnLevel:
+			entry.Warn(message)
+		case logrus.ErrorLevel:
+			entry.Error(message)
+		case logrus.FatalLevel:
+			entry.Fatal(message)
+		case logrus.PanicLevel:
+			entry.Panic(message)
+		}
 	}
 }
 
@@ -137,10 +104,7 @@ func fileInfo(skip int) string {
 		file = "<???>"
 		line = 1
 	} else {
-		slash := strings.LastIndex(file, "/")
-		if slash >= 0 {
-			file = file[slash+1:]
-		}
+		file = file[strings.LastIndex(file, "/")+1:]
 	}
 	return fmt.Sprintf("%s:%d", file, line)
 }

@@ -2,13 +2,13 @@ package api
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
 	"github.com/oswaldom-code/api-template-gin/pkg/config"
+	"github.com/oswaldom-code/api-template-gin/pkg/log"
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure"
 	"github.com/spf13/cobra"
 )
@@ -37,11 +37,18 @@ func StartServer() {
 		Addr:    uri,
 		Handler: r,
 	}
+	
+	logConfig := log.LogConfig{
+		LogToFile: true,
+		FilePath:  "./error.log",
+	}
+
+	log.ConfigureLogger(logConfig)
 
 	go func() {
-		log.Printf("Server running at: %s", uri)
+		log.Info("Server running", log.Fields{"uri": uri})
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed: %v", err)
+			log.Fatal("Server failed:", log.Fields{"error": err.Error()})
 		}
 	}()
 
@@ -49,16 +56,16 @@ func StartServer() {
 	signal.Notify(quit, os.Interrupt)
 	<-quit
 
-	log.Println("Shutting down server...")
+	log.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Fatal("Server forced to shutdown: ", log.Fields{"error": err.Error()})
 	}
 
-	log.Println("Server gracefully stopped.")
+	log.Info("Server gracefully stopped.")
 }
 
 func Execute() {
@@ -71,7 +78,7 @@ func Execute() {
 	rootCmd.AddCommand(newServeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Command execution failed: %v", err)
+		log.Fatal("Command execution failed:", log.Fields{"error": err.Error()})
 		os.Exit(1)
 	}
 }
