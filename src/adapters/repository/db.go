@@ -22,7 +22,7 @@ var repositoryInstance *repository
 // New returns a new instance of a Store
 func NewConnection(dsn config.DBConfig) ports.Store {
 	var dsnStrConnection string
-	log.DebugWithFields("Creating new database connection", log.Fields{"dsn": dsn})
+	log.Debug("Creating new database connection", log.Fields{"dsn": dsn})
 
 	switch dsn.Engine {
 	case "postgre":
@@ -34,7 +34,7 @@ func NewConnection(dsn config.DBConfig) ports.Store {
 			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=true&loc=Local",
 			dsn.User, dsn.Password, dsn.Host, dsn.Port, dsn.Database)
 	default:
-		log.ErrorWithFields("Invalid database engine", log.Fields{"engine": dsn.Engine})
+		log.Error("Invalid database engine", log.Fields{"engine": dsn.Engine})
 	}
 
 	// configure connection
@@ -46,7 +46,7 @@ func NewConnection(dsn config.DBConfig) ports.Store {
 	}
 	db, err := gorm.Open(postgres.Open(dsnStrConnection), config)
 	if err != nil {
-		log.ErrorWithFields("error connecting to db ", log.Fields{
+		log.Error("error connecting to db ", log.Fields{
 			"engine":   dsn.Engine,
 			"host":     dsn.Host,
 			"port":     dsn.Port,
@@ -61,7 +61,7 @@ func NewConnection(dsn config.DBConfig) ports.Store {
 }
 
 func NewRepository() ports.Store {
-	log.DebugWithFields("Creating new database connection", log.Fields{"dsn": config.GetDBConfig()})
+	log.Debug("Creating new database connection", log.Fields{"dsn": config.GetDBConfig()})
 	if repositoryInstance == nil {
 		NewConnection(config.GetDBConfig())
 		return repositoryInstance

@@ -70,7 +70,7 @@ type AuthenticateKeyConfig struct {
 
 func LoadConfiguration() {
 	if err := godotenv.Load(); err != nil {
-		log.Warn("No .env file found, proceeding with default values")
+		log.Info("No .env file found, proceeding with default values")
 	}
 
 	// Definir banderas de configuración
@@ -129,7 +129,7 @@ func GetDBConfig() DBConfig {
 		LogMode:            getEnv("db.log_mode", "info"),       // Valor predeterminado
 		Engine:             getEnv("db.engine", "postgres"),     // Valor predeterminado
 	}
-	log.DebugWithFields("DBConfig", log.Fields{"config": config})
+	log.Debug("DBConfig", log.Fields{"config": config})
 	return config
 }
 
@@ -143,7 +143,7 @@ func GetServerConfig() ServerConfig {
 		PathToSSLCertFile: os.Getenv("server.ssl.cert"),       // Podría ser opcional
 		Static:            os.Getenv("server.static"),         // Podría ser opcional
 	}
-	log.DebugWithFields("ServerConfig", log.Fields{"config": config})
+	log.Debug("ServerConfig", log.Fields{"config": config})
 	return config
 }
 
