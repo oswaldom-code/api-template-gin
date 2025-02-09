@@ -1,0 +1,12 @@
+{
+	"editor.formatOnPaste": true,
+	"go.formatTool": "gofmt",
+	"cSpell.words": [
+		"dbname",
+		"dialector",
+		"logrus",
+		"mysql",
+		"sslmode",
+		"stretchr"
+	]
+}
