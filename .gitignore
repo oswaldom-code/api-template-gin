@@ -26,3 +26,10 @@ config/api.yml
 
 # env file
 .env
+
+# log file
+*.log
+
+# coverage file
+*.cover
+coverage.html
