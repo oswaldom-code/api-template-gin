@@ -3,7 +3,9 @@ package repository
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -12,59 +14,92 @@ import (
 	"github.com/oswaldom-code/api-template-gin/src/aplication/system_services/ports"
 )
 
-// repository handles the database context
 type repository struct {
 	db *gorm.DB
 }
 
 var repositoryInstance *repository
 
-// New returns a new instance of a Store
-func NewConnection(dsn config.DBConfig) ports.Store {
-	var dsnStrConnection string
-	log.Debug("Creating new database connection", log.Fields{"dsn": dsn})
+func retryOnError(maxRetries int, delay time.Duration, action func() error) error {
+	for i := 1; i <= maxRetries; i++ {
+		err := action()
+		if err == nil {
+			return nil
+		}
+		log.Error(fmt.Sprintf("Attempt %d/%d failed: %v", i, maxRetries, err))
+		if i < maxRetries {
+			time.Sleep(delay * time.Duration(1<<i))
+		}
+	}
+	return fmt.Errorf("failed after %d attempts", maxRetries)
+}
 
-	switch dsn.Engine {
-	case "postgre":
+// NewConnection establece una nueva conexión a la base de datos.
+func NewConnection(dbConfig config.DBConfig) (ports.Repository, error) {
+	var dsnStrConnection string
+	log.Debug("Creating new database connection", log.Fields{
+		"engine":   dbConfig.Engine,
+		"host":     dbConfig.Host,
+		"port":     dbConfig.Port,
+		"database": dbConfig.Database,
+		"username": dbConfig.User,
+	})
+
+	switch dbConfig.Engine {
+	case "postgres":
+		timeZone := os.Getenv("DB_TIMEZONE")
+		if timeZone == "" {
+			timeZone = "UTC"
+		}
 		dsnStrConnection = fmt.Sprintf(
-			"host=%s user=%s password=%s dbname=%s port=%v sslmode=%s TimeZone=America/Lima",
-			dsn.Host, dsn.User, dsn.Password, dsn.Database, dsn.Port, dsn.SSLMode)
+			"host=%s user=%s password=%s dbname=%s port=%v sslmode=%s TimeZone=%s",
+			dbConfig.Host, dbConfig.User, dbConfig.Password, dbConfig.Database, dbConfig.Port, dbConfig.SSLMode, timeZone)
 	case "mysql":
 		dsnStrConnection = fmt.Sprintf(
 			"%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=true&loc=Local",
-			dsn.User, dsn.Password, dsn.Host, dsn.Port, dsn.Database)
+			dbConfig.User, dbConfig.Password, dbConfig.Host, dbConfig.Port, dbConfig.Database)
 	default:
-		log.Error("Invalid database engine", log.Fields{"engine": dsn.Engine})
+		log.Error(fmt.Sprintf("Invalid database engine: %s", dbConfig.Engine), log.Fields{"engine": dbConfig.Engine})
+		return &repository{}, fmt.Errorf("unsupported database engine: %s", dbConfig.Engine)
 	}
 
-	// configure connection
-	config := &gorm.Config{
-		// SkipDefaultTransaction: (default false) - skip default transaction for each request
-		// (useful for performance) 30 % faster but you need to handle transactions manually (begin, commit, rollback)
-		SkipDefaultTransaction: true,
-		FullSaveAssociations:   false, // default is true
+	var dialector gorm.Dialector
+	switch dbConfig.Engine {
+	case "postgres":
+		dialector = postgres.Open(dsnStrConnection)
+	case "mysql":
+		dialector = mysql.Open(dsnStrConnection)
 	}
-	db, err := gorm.Open(postgres.Open(dsnStrConnection), config)
-	if err != nil {
-		log.Error("error connecting to db ", log.Fields{
-			"engine":   dsn.Engine,
-			"host":     dsn.Host,
-			"port":     dsn.Port,
-			"database": dsn.Database,
-			"username": dsn.User,
-			"err":      err,
+
+	err := retryOnError(5, time.Second, func() error {
+		db, err := gorm.Open(dialector, &gorm.Config{
+			SkipDefaultTransaction: true,
+			FullSaveAssociations:   false,
 		})
-		os.Exit(1)
+		if err != nil {
+			return err
+		}
+		repositoryInstance = &repository{db: db}
+		return nil
+	})
+
+	if err != nil {
+		log.Error("Error connecting to db", log.Fields{"err": err})
+		return nil, err
 	}
 
-	return &repository{db: db.Set("gorm:auto_preload", true)}
+	return repositoryInstance, nil
 }
 
-func NewRepository() ports.Store {
-	log.Debug("Creating new database connection", log.Fields{"dsn": config.GetDBConfig()})
+func NewRepository(config config.DBConfig) (*repository, error) {
+	log.Debug("Creating new database connection")
 	if repositoryInstance == nil {
-		NewConnection(config.GetDBConfig())
-		return repositoryInstance
+		instance, err := NewConnection(config)
+		if err != nil {
+			log.Error("Error creating new database connection", log.Fields{"err": err})
+			return nil, err
+		}
+		repositoryInstance = instance.(*repository)
 	}
-	return repositoryInstance
+	return repositoryInstance, nil
 }
