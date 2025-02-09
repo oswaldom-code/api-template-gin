@@ -4,6 +4,7 @@
 	"cSpell.words": [
 		"dbname",
 		"dialector",
+		"ginmetrics",
 		"logrus",
 		"mysql",
 		"sslmode",
