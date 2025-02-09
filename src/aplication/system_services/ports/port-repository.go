@@ -1,5 +1,5 @@
 package ports
 
-type Store interface {
+type Repository interface {
 	TestDb() error
 }
