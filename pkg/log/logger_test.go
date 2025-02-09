@@ -9,36 +9,60 @@ import (
 )
 
 func TestSetLogLevel(t *testing.T) {
-	err := SetLogLevel("info")
-	assert.NoError(t, err)
-	assert.Equal(t, logrus.InfoLevel, logger.Level)
+	tests := []struct {
+		level       string
+		expected    logrus.Level
+		expectError bool
+	}{
+		{"info", logrus.InfoLevel, false},
+		{"debug", logrus.DebugLevel, false},
+		{"invalid", logrus.InfoLevel, true}, // Mantiene el nivel anterior si es inválido
+	}
 
-	err = SetLogLevel("debug")
-	assert.NoError(t, err)
-	assert.Equal(t, logrus.DebugLevel, logger.Level)
-
-	err = SetLogLevel("invalid")
-	assert.Error(t, err)
+	for _, tt := range tests {
+		t.Run(tt.level, func(t *testing.T) {
+			err := SetLogLevel(tt.level)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, logger.Level)
+			}
+		})
+	}
 }
 
 func TestInfoLog(t *testing.T) {
-	var buf bytes.Buffer
-	logger.SetOutput(&buf)
+	t.Run("Without Fields", func(t *testing.T) {
+		var buf bytes.Buffer
+		originalOutput := logger.Out
+		defer func() { logger.SetOutput(originalOutput) }()
+		logger.SetOutput(&buf)
 
-	SetLogLevel("info")
+		SetLogLevel("info")
 
-	Info("Info message")
-	assert.Contains(t, buf.String(), "Info message")
+		Info("Info message")
+		assert.Contains(t, buf.String(), "Info message")
+	})
 
-	buf.Reset()
+	t.Run("With Fields", func(t *testing.T) {
+		var buf bytes.Buffer
+		originalOutput := logger.Out
+		defer func() { logger.SetOutput(originalOutput) }()
+		logger.SetOutput(&buf)
 
-	Info("Info with fields", Fields{"myKey": "myValue"})
-	assert.Contains(t, buf.String(), "Info with fields")
-	assert.Contains(t, buf.String(), "myKey=myValue")
+		SetLogLevel("info")
+
+		Info("Info with fields", Fields{"myKey": "myValue"})
+		assert.Contains(t, buf.String(), "Info with fields")
+		assert.Contains(t, buf.String(), "myKey=myValue")
+	})
 }
 
 func TestDebugLog(t *testing.T) {
 	var buf bytes.Buffer
+	originalOutput := logger.Out
+	defer func() { logger.SetOutput(originalOutput) }()
 	logger.SetOutput(&buf)
 
 	SetLogLevel("debug")
@@ -49,6 +73,8 @@ func TestDebugLog(t *testing.T) {
 
 func TestLogWithFields(t *testing.T) {
 	var buf bytes.Buffer
+	originalOutput := logger.Out
+	defer func() { logger.SetOutput(originalOutput) }()
 	logger.SetOutput(&buf)
 
 	SetLogLevel("info")
@@ -60,12 +86,13 @@ func TestLogWithFields(t *testing.T) {
 
 func TestLogLevelFiltering(t *testing.T) {
 	var buf bytes.Buffer
+	originalOutput := logger.Out
+	defer func() { logger.SetOutput(originalOutput) }()
 	logger.SetOutput(&buf)
 
 	SetLogLevel("warning")
 
 	Info("This info message should not appear")
-
 	Warn("This warning message should appear")
 
 	assert.NotContains(t, buf.String(), "This info message should not appear")
