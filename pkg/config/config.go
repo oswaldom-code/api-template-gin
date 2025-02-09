@@ -6,11 +6,12 @@ import (
 	"strconv"
 
 	"github.com/joho/godotenv"
-	"github.com/oswaldom-code/api-template-gin/pkg/log"
 	"github.com/spf13/pflag"
 )
 
-var environment string
+var (
+	environment string
+)
 
 type EnvironmentConfig struct {
 	Environment string
@@ -38,27 +39,6 @@ type ServerConfig struct {
 	Static            string
 }
 
-func SetEnvironment(env string) {
-	environment = env
-}
-
-func (s *ServerConfig) Validate() error {
-	if s.Host == "" || s.Port == "0" || s.Scheme == "" || s.Mode == "" {
-		return fmt.Errorf(`ServerConfig is invalid: 
-        env: %s
-        host: %s
-        port: %s
-        scheme: %s
-        mode: %s`,
-			environment, s.Host, s.Port, s.Scheme, s.Mode)
-	}
-	return nil
-}
-
-func (s ServerConfig) AsUri() string {
-	return s.Host + ":" + s.Port
-}
-
 type LoggingConfig struct {
 	Level        string
 	ErrorLogFile string
@@ -68,115 +48,148 @@ type AuthenticateKeyConfig struct {
 	Secret string
 }
 
-func LoadConfiguration() {
-	if err := godotenv.Load(); err != nil {
-		log.Info("No .env file found, proceeding with default values")
-	}
-
-	// Definir banderas de configuración
-	pflag.String("db.user", "", "Database user")
-	pflag.String("db.password", "", "Database password")
-	pflag.String("db.host", "", "Database host")
-	pflag.Int("db.port", 0, "Database port")
-	pflag.String("server.host", "localhost", "Server host")
-	pflag.String("server.port", "9000", "Server port")
-	pflag.String("server.scheme", "http", "Server scheme")
-	pflag.String("server.mode", "debug", "Server mode")
-	pflag.String("auth.secret", "", "Authentication secret")
-
-	pflag.Parse()
-
-	loadEnvVariables()
-
-	log.SetLogLevel(GetLogConfig().Level)
+func SetEnvironment(env string) {
+	environment = env
 }
 
-func loadEnvVariables() {
-	envVars := []struct {
-		key   string
-		value string
-	}{
-		{"DB_USER", "db.user"},
-		{"DB_PASSWORD", "db.password"},
-		{"DB_HOST", "db.host"},
-		{"DB_PORT", "db.port"},
-		{"SERVER_HOST", "server.host"},
-		{"SERVER_PORT", "server.port"},
-		{"SERVER_SCHEME", "server.scheme"},
-		{"SERVER_MODE", "server.mode"},
-		{"AUTH_SECRET", "auth.secret"},
+func (s *ServerConfig) Validate() error {
+	requiredFields := map[string]string{
+		"HOST":   s.Host,
+		"PORT":   s.Port,
+		"SCHEME": s.Scheme,
+		"MODE":   s.Mode,
 	}
 
-	for _, envVar := range envVars {
-		if value, exists := os.LookupEnv(envVar.key); exists {
-			if err := os.Setenv(envVar.value, value); err != nil {
-				log.Warn(fmt.Sprintf("Failed to set environment variable %s: %v", envVar.value, err))
+	for field, value := range requiredFields {
+		if value == "" {
+			return fmt.Errorf("ServerConfig is invalid: %s is empty", field)
+		}
+	}
+	return nil
+}
+
+func (s ServerConfig) AsUri() string {
+	return fmt.Sprintf("%s:%s", s.Host, s.Port)
+}
+
+func LoadConfigFromFlagsAndEnv() error {
+	pflag.String("DB_HOST", "localhost", "Database host")
+	pflag.Int("DB_PORT", 5432, "Database port")
+	pflag.String("DB_USER", "default_user", "Database user")
+	pflag.String("DB_PASSWORD", "default_pass", "Database password")
+	pflag.String("SERVER_HOST", "0.0.0.0", "Server host")
+	pflag.String("SERVER_PORT", "9000", "Server port")
+	pflag.String("SERVER_SCHEME", "http", "Server scheme")
+	pflag.String("SERVER_MODE", "release", "Server mode")
+	pflag.String("AUTH_SECRET", "default_secret", "Authentication secret")
+
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("No .env file found, proceeding with default values")
+	} else {
+		fmt.Println(".env file loaded successfully")
+	}
+
+	if err := applyEnvVarsToFlags(); err != nil {
+		return fmt.Errorf("failed to apply environment variables to flags: %v", err)
+	}
+	pflag.Parse()
+
+	return nil
+}
+
+func applyEnvVarsToFlags() error {
+	// Mapa de las variables de entorno que queremos cargar y los flags correspondientes
+	envVars := map[string]string{
+		"DB_HOST":       "DB_HOST",
+		"DB_PORT":       "DB_PORT",
+		"DB_USER":       "DB_USER",
+		"DB_PASSWORD":   "DB_PASSWORD",
+		"SERVER_HOST":   "SERVER_HOST",
+		"SERVER_PORT":   "SERVER_PORT",
+		"SERVER_SCHEME": "SERVER_SCHEME",
+		"SERVER_MODE":   "SERVER_MODE",
+		"AUTH_SECRET":   "AUTH_SECRET",
+	}
+
+	// Recorremos las variables de entorno y asignamos los valores a los flags correspondientes
+	for envVar, flag := range envVars {
+		if value, exists := os.LookupEnv(envVar); exists {
+			if err := pflag.Set(flag, value); err != nil {
+				return fmt.Errorf("failed to set flag %s with value %s: %v", flag, value, err)
 			}
 		}
 	}
+	return nil
 }
 
 func GetDBConfig() DBConfig {
-	port, _ := strconv.Atoi(os.Getenv("db.port"))
-	config := DBConfig{
-		User:               getEnv("db.user", "default_user"),     // Valor predeterminado
-		Password:           getEnv("db.password", "default_pass"), // Valor predeterminado
-		Host:               getEnv("db.host", "localhost"),        // Valor predeterminado
-		Port:               port,
-		Database:           getEnv("db.database", "default_db"), // Valor predeterminado
-		MaxOpenConnections: getIntEnv("db.max_connections", 10), // Valor predeterminado
-		SSLMode:            getEnv("db.ssl_mode", "disable"),    // Valor predeterminado
-		LogMode:            getEnv("db.log_mode", "info"),       // Valor predeterminado
-		Engine:             getEnv("db.engine", "postgres"),     // Valor predeterminado
+	return DBConfig{
+		User:               getEnv("DB_USER", "default_user"),
+		Password:           getEnv("DB_PASSWORD", "default_pass"),
+		Host:               getEnv("DB_HOST", "localhost"),
+		Port:               getIntEnv("DB_PORT", 5432),
+		Database:           getEnv("DB_DATABASE", "default_db"),
+		MaxOpenConnections: getIntEnv("DB_MAX_CONNECTIONS", 10),
+		SSLMode:            getEnv("DB_SSL_MODE", "disable"),
+		LogMode:            getEnv("DB_LOG_MODE", "info"),
+		Engine:             getEnv("DB_ENGINE", "postgres"),
 	}
-	log.Debug("DBConfig", log.Fields{"config": config})
-	return config
 }
 
 func GetServerConfig() ServerConfig {
-	config := ServerConfig{
-		Host:              getEnv("server.host", "localhost"), // Valor predeterminado
-		Port:              getEnv("server.port", "9000"),      // Valor predeterminado
-		Scheme:            getEnv("server.scheme", "http"),    // Valor predeterminado
-		Mode:              getEnv("server.mode", "debug"),     // Valor predeterminado
-		PathToSSLKeyFile:  os.Getenv("server.ssl.key"),        // Podría ser opcional
-		PathToSSLCertFile: os.Getenv("server.ssl.cert"),       // Podría ser opcional
-		Static:            os.Getenv("server.static"),         // Podría ser opcional
+	return ServerConfig{
+		Host:              getEnv("SERVER_HOST", "0.0.0.0"),
+		Port:              getEnv("SERVER_PORT", "9000"),
+		Scheme:            getEnv("SERVER_SCHEME", "http"),
+		Mode:              getEnv("SERVER_MODE", "release"),
+		PathToSSLKeyFile:  os.Getenv("SERVER_SSL_KEY"),
+		PathToSSLCertFile: os.Getenv("SERVER_SSL_CERT"),
+		Static:            os.Getenv("SERVER_STATIC"),
 	}
-	log.Debug("ServerConfig", log.Fields{"config": config})
-	return config
 }
 
 func GetLogConfig() LoggingConfig {
 	return LoggingConfig{
-		Level:        getEnv("log.level", "info"),
-		ErrorLogFile: os.Getenv("log.errorLogFile"),
+		Level:        getEnv("LOG_LEVEL", "info"),
+		ErrorLogFile: os.Getenv("LOG_ERROR_LOG_FILE"),
 	}
 }
 
 func GetEnvironmentConfig() EnvironmentConfig {
 	return EnvironmentConfig{
-		Environment: getEnv("environment", "development"),
+		Environment: getEnv("ENVIRONMENT", "development"),
 	}
 }
 
 func GetAuthenticationKey() AuthenticateKeyConfig {
 	return AuthenticateKeyConfig{
-		Secret: getEnv("auth.secret", "default_secret"),
+		Secret: getEnv("AUTH_SECRET", "default_secret"),
 	}
 }
 
+// Función genérica para obtener variables de entorno
 func getEnv(key, defaultValue string) string {
+	// Primero verifica si el flag está definido
+	if value := pflag.Lookup(key); value != nil && value.Value.String() != "" {
+		return value.Value.String()
+	}
+	// Si el flag no está definido, busca en las variables de entorno
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
+	// Si no hay flag ni variable de entorno, devuelve el valor por defecto
 	return defaultValue
 }
 
+// Función genérica para obtener variables enteras
 func getIntEnv(key string, defaultValue int) int {
-	value, exists := os.LookupEnv(key)
-	if exists {
+	if value, exists := os.LookupEnv(key); exists {
 		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	if value := pflag.Lookup(key); value != nil {
+		if intValue, err := strconv.Atoi(value.Value.String()); err == nil {
 			return intValue
 		}
 	}
