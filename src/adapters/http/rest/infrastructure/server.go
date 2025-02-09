@@ -1,43 +1,43 @@
 package infrastructure
 
 import (
-	"encoding/base64"
 	"io"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	metrics "github.com/penglongli/gin-metrics/ginmetrics"
 
 	"github.com/oswaldom-code/api-template-gin/pkg/config"
+	"github.com/oswaldom-code/api-template-gin/pkg/log"
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/handlers"
+	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure/middlewares"
+	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure/routes"
 )
 
-var basicAuthorizationMiddleware MiddlewareFunc = func(c *gin.Context) {
-	// get token from header
-	token := c.GetHeader("Authorization")
-	// validate token
-	if token != "Basic "+base64.StdEncoding.EncodeToString([]byte(config.GetAuthenticationKey().Secret)) {
-		// response unauthorized status code
-		c.Redirect(http.StatusFound, "/authorization")
-	}
-}
-
 func setMetrics(router *gin.Engine) {
-	// get global Monitor object
 	monitor := metrics.GetMonitor()
-	// +optional set metric path, default /debug/metrics
+	if monitor == nil {
+		log.Error("[ERROR] No se pudo obtener el monitor de métricas")
+		return
+	}
+
 	monitor.SetMetricPath("/metrics")
-	// +optional set slow time, default 5s
-	monitor.SetSlowTime(10)
-	// +optional set request duration, default {0.1, 0.3, 1.2, 5, 10}
-	// used to p95, p99
-	monitor.SetDuration([]float64{0.1, 0.3, 1.2, 5, 10})
+	slowTime := int32(5)
+	monitor.SetSlowTime(slowTime) // default is 5 seconds TODO: make it configurable
+	durationThresholds := []float64{0.5, 1, 3, 5, 10}
+	monitor.SetDuration(durationThresholds)
+
 	monitor.Use(router)
+
+	log.Info("Métricas configuradas correctamente", log.Fields{
+		"metric_path":          "/metrics",
+		"slow_time":            slowTime,
+		"duration_percentiles": durationThresholds,
+	})
 }
 
 // NewGinServer creates a new Gin server.
-func NewGinServer(handler ServerInterface) *gin.Engine {
+func NewGinServer(handler routes.ServerInterface) *gin.Engine {
 	// get configuration
 	serverConfig := config.GetServerConfig()
 	// validate parameters configuration
@@ -45,29 +45,46 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 		panic("[ERROR] server configuration is not valid")
 	}
 
-	// set gin mode (debug or release)
+	log.Info("Running in mode: ", log.Fields{"mode": serverConfig.Mode})
 	gin.SetMode(serverConfig.Mode)
+
 	// if debug mode is release write the logs to a file
 	if serverConfig.Mode == "release" {
 		// Disable Console Color, you don't need console color when writing the logs to file.
 		gin.DisableConsoleColor()
-		// Logging to a file.  // TODO: add current date to log file name
+
+		if err := os.MkdirAll("log", os.ModePerm); err != nil {
+			log.Error("[ERROR] failed to create log directory", log.Fields{"error": err})
+			return nil
+		}
+
 		f, ok := os.Create("log/error.log")
 		if ok != nil {
-			panic("[ERROR] error creating log file")
+			log.Error("[ERROR] error creating log file", log.Fields{"error": ok})
+			return nil
 		}
-		gin.DefaultWriter = io.MultiWriter(f)
+		defer f.Close()
+
+		// Usa un writer para los logs de Gin y tu paquete de logs
+		multiWriter := io.MultiWriter(f, os.Stdout) // También puedes redirigir a stdout o a tu logger personalizado
+		gin.DefaultWriter = multiWriter
 	}
 
 	// create routes
 	router := gin.Default()
-	// set metrics
+	if router == nil {
+		log.Error("[ERROR] failed to create gin router")
+		return nil
+	}
+
 	setMetrics(router)
-	// set middleware
-	ginServerOptions := GinServerOptions{BaseURL: "/"}
-	ginServerOptions.Middlewares = append(ginServerOptions.Middlewares, basicAuthorizationMiddleware)
+
+	ginServerOptions := routes.GinServerOptions{BaseURL: "/"}
+	ginServerOptions.Middlewares = append(ginServerOptions.Middlewares, middlewares.BasicAuthorizationMiddleware)
+
 	// register Handler, router and middleware to gin
-	RegisterHandlersWithOptions(router, handler, ginServerOptions)
+	routes.RegisterHandlersWithOptions(router, handler, ginServerOptions)
+
 	return router
 }
 

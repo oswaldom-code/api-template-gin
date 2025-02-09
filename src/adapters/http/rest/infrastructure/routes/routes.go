@@ -1,6 +1,9 @@
-package infrastructure
+package routes
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure/middlewares"
+)
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -10,10 +13,8 @@ type ServerInterface interface {
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
 	Handler            ServerInterface
-	HandlerMiddlewares []MiddlewareFunc
+	HandlerMiddlewares []middlewares.MiddlewareFunc
 }
-
-type MiddlewareFunc func(c *gin.Context)
 
 // Health operation middleware
 func (siw *ServerInterfaceWrapper) Health(c *gin.Context) {
@@ -23,7 +24,7 @@ func (siw *ServerInterfaceWrapper) Health(c *gin.Context) {
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL     string
-	Middlewares []MiddlewareFunc
+	Middlewares []middlewares.MiddlewareFunc
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
