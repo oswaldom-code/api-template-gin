@@ -7,6 +7,6 @@ import (
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/dto"
 )
 
-func (h *Handler) Ping(c *gin.Context) {
+func (h *Handler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.Response{Status: true, Message: "pong"})
 }
