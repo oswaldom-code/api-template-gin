@@ -5,9 +5,41 @@ services:
       dockerfile: Dockerfile
     image:  ${APP_CONTAINER_NAME}:latest
     container_name: ${APP_CONTAINER_NAME}
-    ports:
-      - "3000:9000"
     environment:
-      SERVER_PORT: 9000
-      SERVER_HOST: localhost
-      
+      - SERVER_PORT=8080     
+      - SERVER_MODE=release
+    ports:
+      - 8080:8080
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.43.0
+    container_name: prometheus
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - 3000:3000
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+networks:
+  monitoring:
+    driver: bridge
