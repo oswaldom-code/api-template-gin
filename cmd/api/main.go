@@ -14,7 +14,7 @@ import (
 )
 
 func Initialize() {
-	config.LoadConfiguration()
+	config.LoadConfigFromFlagsAndEnv()
 	config.SetEnvironment(config.GetEnvironmentConfig().Environment)
 }
 
@@ -37,10 +37,10 @@ func StartServer() {
 		Addr:    uri,
 		Handler: r,
 	}
-	
+
 	logConfig := log.LogConfig{
 		LogToFile: true,
-		FilePath:  "./error.log",
+		FilePath:  "./error.log", // TODO: Get path from config
 	}
 
 	log.ConfigureLogger(logConfig)
