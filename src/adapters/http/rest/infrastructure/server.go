@@ -3,24 +3,26 @@ package infrastructure
 import (
 	"encoding/base64"
 	"io"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	metrics "github.com/penglongli/gin-metrics/ginmetrics"
 
 	"github.com/oswaldom-code/api-template-gin/pkg/config"
+	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/dto"
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/handlers"
 )
 
-var basicAuthorizationMiddleware MiddlewareFunc = func(c *gin.Context) {
+var basicAuthorizationMiddleware gin.HandlerFunc = func(c *gin.Context) {
 	// get token from header
 	token := c.GetHeader("Authorization")
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte(config.GetAuthenticationKey().Secret))
 	// validate token
-	if token != "Basic "+base64.StdEncoding.EncodeToString([]byte(config.GetAuthenticationKey().Secret)) {
-		// response unauthorized status code
-		c.Redirect(http.StatusFound, "/authorization")
+	if token != expected {
+		dto.Unauthorized(c, "Invalid or missing auth token")
+		return
 	}
+	c.Next()
 }
 
 func setMetrics(router *gin.Engine) {
@@ -41,7 +43,7 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 	// get configuration
 	serverConfig := config.GetServerConfig()
 	// validate parameters configuration
-	if ok := serverConfig.Validate(); ok != nil {
+	if err := serverConfig.Validate(); err != nil {
 		panic("[ERROR] server configuration is not valid")
 	}
 
@@ -51,9 +53,9 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 	if serverConfig.Mode == "release" {
 		// Disable Console Color, you don't need console color when writing the logs to file.
 		gin.DisableConsoleColor()
-		// Logging to a file.  // TODO: add current date to log file name
-		f, ok := os.Create("log/error.log")
-		if ok != nil {
+		// Logging to a file.
+		f, err := os.Create("log/error.log")
+		if err != nil {
 			panic("[ERROR] error creating log file")
 		}
 		gin.DefaultWriter = io.MultiWriter(f)
@@ -63,10 +65,11 @@ func NewGinServer(handler ServerInterface) *gin.Engine {
 	router := gin.Default()
 	// set metrics
 	setMetrics(router)
-	// set middleware
-	ginServerOptions := GinServerOptions{BaseURL: "/"}
-	ginServerOptions.Middlewares = append(ginServerOptions.Middlewares, basicAuthorizationMiddleware)
-	// register Handler, router and middleware to gin
+	// register handlers with route groups (public + protected)
+	ginServerOptions := GinServerOptions{
+		BaseURL:     "/",
+		Middlewares: []gin.HandlerFunc{basicAuthorizationMiddleware},
+	}
 	RegisterHandlersWithOptions(router, handler, ginServerOptions)
 	return router
 }

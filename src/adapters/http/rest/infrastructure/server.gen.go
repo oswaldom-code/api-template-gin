@@ -7,23 +7,10 @@ type ServerInterface interface {
 	Ping(c *gin.Context)
 }
 
-// ServerInterfaceWrapper converts contexts to parameters.
-type ServerInterfaceWrapper struct {
-	Handler            ServerInterface
-	HandlerMiddlewares []MiddlewareFunc
-}
-
-type MiddlewareFunc func(c *gin.Context)
-
-// Ping operation middleware
-func (siw *ServerInterfaceWrapper) Ping(c *gin.Context) {
-	siw.Handler.Ping(c)
-}
-
 // GinServerOptions provides options for the Gin server.
 type GinServerOptions struct {
 	BaseURL     string
-	Middlewares []MiddlewareFunc
+	Middlewares []gin.HandlerFunc
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
@@ -31,14 +18,23 @@ func RegisterHandlers(router *gin.Engine, si ServerInterface) *gin.Engine {
 	return RegisterHandlersWithOptions(router, si, GinServerOptions{})
 }
 
-// RegisterHandlersWithOptions creates http.Handler with additional options
+// RegisterHandlersWithOptions creates http.Handler with public and protected route groups.
 func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options GinServerOptions) *gin.Engine {
-	wrapper := ServerInterfaceWrapper{
-		Handler:            si,
-		HandlerMiddlewares: options.Middlewares,
+	public := router.Group(options.BaseURL)
+	{
+		public.GET("/ping", func(c *gin.Context) {
+			si.Ping(c)
+		})
 	}
 
-	router.GET(options.BaseURL+"/ping", wrapper.Ping)
+	protected := router.Group(options.BaseURL)
+	for _, m := range options.Middlewares {
+		protected.Use(m)
+	}
+	{
+		// Add protected routes here as the API grows
+		// Example: protected.GET("/users", si.ListUsers)
+	}
 
 	return router
 }
