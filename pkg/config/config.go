@@ -83,6 +83,14 @@ func LoadConfiguration() {
 	pflag.String("server.scheme", "http", "Server scheme")
 	pflag.String("server.mode", "debug", "Server mode")
 	pflag.String("auth.secret", "", "Authentication secret")
+	pflag.String("db.database", "default_db", "Database name")
+	pflag.Int("db.max_connections", 10, "Database max open connections")
+	pflag.String("db.ssl_mode", "disable", "Database SSL mode")
+	pflag.String("db.log_mode", "info", "Database log mode")
+	pflag.String("db.engine", "postgres", "Database engine")
+	pflag.String("log.level", "info", "Log level")
+	pflag.String("log.errorLogFile", "", "Error log file path")
+	pflag.String("environment", "development", "Environment name")
 
 	pflag.Parse()
 
@@ -105,6 +113,14 @@ func loadEnvVariables() {
 		{"SERVER_SCHEME", "server.scheme"},
 		{"SERVER_MODE", "server.mode"},
 		{"AUTH_SECRET", "auth.secret"},
+		{"DB_DATABASE", "db.database"},
+		{"DB_MAX_CONNECTIONS", "db.max_connections"},
+		{"DB_SSL_MODE", "db.ssl_mode"},
+		{"DB_LOG_MODE", "db.log_mode"},
+		{"DB_ENGINE", "db.engine"},
+		{"LOG_LEVEL", "log.level"},
+		{"LOG_ERROR_LOG_FILE", "log.errorLogFile"},
+		{"ENVIRONMENT", "environment"},
 	}
 
 	for _, envVar := range envVars {

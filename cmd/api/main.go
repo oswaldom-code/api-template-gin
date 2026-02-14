@@ -9,6 +9,7 @@ import (
 
 	"github.com/oswaldom-code/api-template-gin/pkg/config"
 	"github.com/oswaldom-code/api-template-gin/pkg/log"
+	"github.com/oswaldom-code/api-template-gin/src/adapters/cli"
 	"github.com/oswaldom-code/api-template-gin/src/adapters/http/rest/infrastructure"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,17 @@ func newServeCmd() *cobra.Command {
 	}
 }
 
+func newCliCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cli",
+		Short: "Run CLI utilities",
+		Long:  `Execute CLI utility functions like database health checks.`,
+		RunE:  cli.RunCliCmd,
+	}
+	cmd.Flags().StringP("function", "f", "", "Function to execute (e.g., test)")
+	return cmd
+}
+
 func StartServer() {
 	r := infrastructure.NewServer()
 	uri := config.GetServerConfig().AsUri()
@@ -37,13 +49,16 @@ func StartServer() {
 		Addr:    uri,
 		Handler: r,
 	}
-	
+
+	logCfg := config.GetLogConfig()
 	logConfig := log.LogConfig{
-		LogToFile: true,
-		FilePath:  "./error.log",
+		LogToFile: logCfg.ErrorLogFile != "",
+		FilePath:  logCfg.ErrorLogFile,
 	}
 
-	log.ConfigureLogger(logConfig)
+	if err := log.ConfigureLogger(logConfig); err != nil {
+		log.Warn("Failed to configure logger, using defaults", log.Fields{"error": err.Error()})
+	}
 
 	go func() {
 		log.Info("Server running", log.Fields{"uri": uri})
@@ -72,10 +87,11 @@ func Execute() {
 	Initialize()
 
 	rootCmd := &cobra.Command{
-		Use: "api-template", // Replace with your desired command name
+		Use: "api-template",
 	}
 
 	rootCmd.AddCommand(newServeCmd())
+	rootCmd.AddCommand(newCliCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Command execution failed:", log.Fields{"error": err.Error()})

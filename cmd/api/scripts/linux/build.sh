@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # versión
-APP_VERTION=$1
+APP_VERSION=$1
 
 # Application name
 APP_NAME="app" # Replace with your actual application name
@@ -19,11 +19,11 @@ ARCHITECTURES=("386" "amd64")
 for os in "${PLATFORMS[@]}"; do
     for arch in "${ARCHITECTURES[@]}"; do
         echo "Compiling $os/$arch..."
-        GOOS=$os GOARCH=$arch go build -o "$BUILD_DIR/$APP_VERTION/$APP_NAME-$os-$arch-v$APP_VERTION"
+        GOOS=$os GOARCH=$arch go build -o "$BUILD_DIR/$APP_VERSION/$APP_NAME-$os-$arch-v$APP_VERSION"
 
         # If it's Windows, add the .exe extension
         if [ "$os" = "windows" ]; then
-            mv "$BUILD_DIR/$APP_VERTION/$APP_NAME-$os-$arch-v$APP_VERTION" "$BUILD_DIR/$APP_VERTION/$APP_NAME-$os-$arch-v$APP_VERTION.exe"
+            mv "$BUILD_DIR/$APP_VERSION/$APP_NAME-$os-$arch-v$APP_VERSION" "$BUILD_DIR/$APP_VERSION/$APP_NAME-$os-$arch-v$APP_VERSION.exe"
         fi
     done
 done

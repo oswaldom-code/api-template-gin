@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	Service "github.com/oswaldom-code/api-template-gin/src/aplication/system_services"
+	Service "github.com/oswaldom-code/api-template-gin/src/application/system_services"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,10 @@ func askConfirmation() bool {
 }
 
 func RunCliCmd(cmd *cobra.Command, args []string) error {
-	healthService := Service.HealthService()
+	healthService, err := Service.HealthService()
+	if err != nil {
+		return fmt.Errorf("failed to initialize health service: %w", err)
+	}
 	function, err := cmd.Flags().GetString("function")
 	if err != nil {
 		fmt.Println("Error:", err)

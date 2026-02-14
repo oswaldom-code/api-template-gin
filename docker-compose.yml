@@ -1,13 +1,37 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: api-template-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-api_template}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    image:  ${APP_CONTAINER_NAME}:latest
-    container_name: ${APP_CONTAINER_NAME}
+    image: api-template-app:latest
+    container_name: api-template-app
     ports:
-      - "3000:9000"
+      - "9000:9000"
+    env_file:
+      - .env
     environment:
-      SERVER_PORT: 9000
-      SERVER_HOST: localhost
-      
+      DB_HOST: db
+      SERVER_HOST: 0.0.0.0
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
